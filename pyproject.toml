@@ -1,13 +1,13 @@
 [project]
-name = "dengue-us"
+name = "dengue-incidence"
 version = "0.1.0"
-description = "Figures tracking reported dengue incidence in the United States from CDC ArboNET data."
+description = "Figures tracking reported dengue incidence in the United States (CDC ArboNET), worldwide and in Europe (WHO)."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["pandas>=2.2", "matplotlib>=3.8", "geopandas>=1.0"]
 
 [project.scripts]
-dengue-us = "dengue_us.cli:main"
+dengue-incidence = "dengue_incidence.cli:main"
 
 [build-system]
 requires = ["hatchling"]
