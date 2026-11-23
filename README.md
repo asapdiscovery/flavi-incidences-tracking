@@ -1,4 +1,4 @@
-# Dengue and West Nile virus incidence: United States, world and Europe
+# Flavivirus incidence tracking: dengue and West Nile virus
 
 Figures tracking reported dengue and West Nile virus incidence, rebuilt from public surveillance data whenever the pipeline is rerun. Dengue: the US figures come from CDC data, the world figures from WHO (gaps filled from OpenDengue) and the Europe figures from ECDC. West Nile virus: the US figure comes from CDC data and the Europe figure from ECDC. Each run writes date-stamped files, so the folders under `figures/` build up a running history.
 
@@ -9,22 +9,35 @@ uv run dengue-incidence            # fetch latest data, write today's figures + 
 uv run dengue-incidence --stamp 2026-12-01 --out .
 ```
 
-Outputs (`.png` next to each `.gif`: its final frame):
+Outputs are grouped by virus, then region. Each `.gif` has a `.png` of its final frame next to it.
+
+```
+figures/
+  dengue/
+    us/        animation/  incidence_lines/  cases_map/
+    world/     animation/
+    europe/    animation/
+  wnv/         West Nile virus
+    us/        animation/
+    europe/    animation/
+    world/     README only: WHO does not track West Nile virus
+data/          the same virus and region folders, one CSV per run
+```
 
 | Path | Content |
 |---|---|
-| `figures/us/incidence_lines/<date>.png` | Dengue: cumulative cases per 100k by state since 2010; US total and selected states highlighted |
-| `figures/us/animation/<date>.gif` | Dengue: US map of cumulative incidence filling in by year, alongside the line plot |
-| `figures/us/cases_map/<date>.png` | Dengue: cumulative cases by jurisdiction, binned as on CDC's map (sanity check against cdc.gov) |
-| `figures/world/animation/<date>.gif` | Dengue: world map and per-country lines by year since 2000, top 3 countries and 4 others highlighted |
-| `figures/europe/animation/<date>.gif` | Dengue: EU/EEA map and per-country lines by year since 2010, top 3 countries highlighted |
-| `figures/wnv/us/animation/<date>.gif` | West Nile virus: US map and per-state lines of neuroinvasive cases by year since 1999, 5 states highlighted |
-| `figures/wnv/europe/animation/<date>.gif` | West Nile virus: EU/EEA map and per-country lines of locally acquired cases by year since 2010, top 3 countries and Italy highlighted |
-| `data/us/<date>.csv` | Tidy CDC dengue table: status, state, year, cases, population, incidence per 100k |
-| `data/world/<date>.csv` | Tidy world dengue table: year, country, cases, source (WHO or OpenDengue), population, incidence per 100k |
-| `data/europe/<date>.csv` | Tidy ECDC dengue table, same columns as the world one |
-| `data/wnv/us/<date>.csv` | Tidy CDC West Nile table (neuroinvasive cases), same columns as `data/us` |
-| `data/wnv/europe/<date>.csv` | Tidy ECDC West Nile table (locally acquired cases), same columns as `data/europe` |
+| `figures/dengue/us/incidence_lines/<date>.png` | Cumulative cases per 100k by state since 2010; US total and selected states highlighted |
+| `figures/dengue/us/animation/<date>.gif` | US map of cumulative incidence filling in by year, alongside the line plot |
+| `figures/dengue/us/cases_map/<date>.png` | Cumulative cases by jurisdiction, binned as on CDC's map (sanity check against cdc.gov) |
+| `figures/dengue/world/animation/<date>.gif` | World map and per-country lines by year since 2000, top 3 countries and 4 others highlighted |
+| `figures/dengue/europe/animation/<date>.gif` | EU/EEA map and per-country lines by year since 2010, top 3 countries highlighted |
+| `figures/wnv/us/animation/<date>.gif` | US map and per-state lines of neuroinvasive cases by year since 1999, 5 states highlighted |
+| `figures/wnv/europe/animation/<date>.gif` | EU/EEA map and per-country lines of locally acquired cases by year since 2010, top 3 countries and Italy highlighted |
+| `data/dengue/us/<date>.csv` | Tidy CDC table: status, state, year, cases, population, incidence per 100k |
+| `data/dengue/world/<date>.csv` | Tidy world table: year, country, cases, source (WHO or OpenDengue), population, incidence per 100k |
+| `data/dengue/europe/<date>.csv` | Tidy ECDC table, same columns as the world one |
+| `data/wnv/us/<date>.csv` | Tidy CDC table of neuroinvasive cases, same columns as `data/dengue/us` |
+| `data/wnv/europe/<date>.csv` | Tidy ECDC table of locally acquired cases, same columns as `data/dengue/europe` |
 
 ## Data
 

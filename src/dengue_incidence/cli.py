@@ -23,20 +23,20 @@ def main():
     iso3 = world.countries()
     eu, eu_names = europe.load(iso3)
     eu_wnv, eu_wnv_names = europe.load(iso3, europe.WNV)
-    data, figs = args.out / "data", args.out / "figures"
-    paths = {
-        "us_data": data / "us" / f"{args.stamp}.csv",
-        "world_data": data / "world" / f"{args.stamp}.csv",
-        "europe_data": data / "europe" / f"{args.stamp}.csv",
-        "us_lines": figs / "us" / "incidence_lines" / f"{args.stamp}.png",
-        "us_map": figs / "us" / "cases_map" / f"{args.stamp}.png",
-        "us_gif": figs / "us" / "animation" / f"{args.stamp}.gif",
-        "world_gif": figs / "world" / "animation" / f"{args.stamp}.gif",
-        "europe_gif": figs / "europe" / "animation" / f"{args.stamp}.gif",
-        "wnv_us_data": data / "wnv" / "us" / f"{args.stamp}.csv",
-        "wnv_europe_data": data / "wnv" / "europe" / f"{args.stamp}.csv",
-        "wnv_us_gif": figs / "wnv" / "us" / "animation" / f"{args.stamp}.gif",
-        "wnv_europe_gif": figs / "wnv" / "europe" / "animation" / f"{args.stamp}.gif",
+    data, figs, stamp = args.out / "data", args.out / "figures", args.stamp
+    paths = {  # by virus, then region
+        "us_data": data / "dengue" / "us" / f"{stamp}.csv",
+        "world_data": data / "dengue" / "world" / f"{stamp}.csv",
+        "europe_data": data / "dengue" / "europe" / f"{stamp}.csv",
+        "us_lines": figs / "dengue" / "us" / "incidence_lines" / f"{stamp}.png",
+        "us_map": figs / "dengue" / "us" / "cases_map" / f"{stamp}.png",
+        "us_gif": figs / "dengue" / "us" / "animation" / f"{stamp}.gif",
+        "world_gif": figs / "dengue" / "world" / "animation" / f"{stamp}.gif",
+        "europe_gif": figs / "dengue" / "europe" / "animation" / f"{stamp}.gif",
+        "wnv_us_data": data / "wnv" / "us" / f"{stamp}.csv",
+        "wnv_europe_data": data / "wnv" / "europe" / f"{stamp}.csv",
+        "wnv_us_gif": figs / "wnv" / "us" / "animation" / f"{stamp}.gif",
+        "wnv_europe_gif": figs / "wnv" / "europe" / "animation" / f"{stamp}.gif",
     }
     for path in paths.values():
         path.parent.mkdir(parents=True, exist_ok=True)
