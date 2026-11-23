@@ -128,7 +128,7 @@ def _draw_lines(ax, cum, context, highlight, total, names, ticks, fs=1, end_dots
             ax.plot(x[-1], ends[c], "o", ms=5, color=highlight.get(c, INK), zorder=4)
         ax.annotate(names[c], (x[-1], ends[c]), xytext=(1.01, y), textcoords=("axes fraction", "data"), va="center",
                     fontsize=10 * fs, color=INK, fontweight="bold" if c == total else "normal", annotation_clip=False,
-                    arrowprops=dict(arrowstyle="-", color=MUTED, lw=0.6, shrinkA=1, shrinkB=4))
+                    arrowprops=dict(arrowstyle="-", color=MUTED, lw=0.6, shrinkA=1, shrinkB=4, relpos=(0, 0.5)))
 
     ax.set(xlim=(x[0] - pad, x[-1] + pad), ylim=(0, ymax), ylabel=ylabel)
     ax.set_xticks(list(ticks), list(ticks.values()), fontsize=9 * fs)
