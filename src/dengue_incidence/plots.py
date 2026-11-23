@@ -1,5 +1,7 @@
-"""Figures of dengue incidence: US states from CDC, and the world and Europe from WHO."""
+"""Figures of dengue incidence: US states (CDC), the world (WHO, OpenDengue) and the EU/EEA (ECDC)."""
 
+import re
+from datetime import date
 from pathlib import Path
 
 import geopandas as gpd
@@ -11,13 +13,14 @@ from matplotlib.ticker import StrMethodFormatter
 
 from .cdc import FIPS, NAMES, STATES
 
-INK, MUTED, GRID, CONTEXT, EMPTY, NODATA = "#0b0b0b", "#6b6a66", "#e6e5e0", "#d3d2cd", "#e6e6e6", "white"
+INK, MUTED, GRID, CONTEXT, EMPTY = "#0b0b0b", "#6b6a66", "#e6e5e0", "#d3d2cd", "#e6e6e6"
 HERE = Path(__file__).parent
 ATLAS = HERE / "states-albers-10m.json"  # us-atlas 3.0.1 (ISC), Census boundaries
 WORLD = HERE / "world-50m.geojson"  # Natural Earth 1:50m map units (public domain), one shape per ISO3 code
 HIGHLIGHT = {"FL": "#2a78d6", "CA": "#eb6834", "TX": "#1baf7a", "HI": "#eda100"}
 US_CONTEXT = [s for s in STATES if s not in HIGHLIGHT]
-MIN_POP = 1e6  # WHO countries and territories smaller than this are mapped but left off the line plots
+MIN_POP = 1e6  # countries and territories smaller than this are mapped but left off the line plots
+PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"]  # categorical, in fixed order
 RED = ["#f8a49d", "#ed756e", "#db4242", "#b32229", "#7c1117"]  # one-hue ramp, light to dark
 CDC_BINS = [  # bins and approximate colors of the CDC jurisdiction map
     (0, "No reported cases", EMPTY),
@@ -30,19 +33,20 @@ INC_BINS = [  # cumulative cases per 100k (under 1 shown as 0)
     (0, "0", EMPTY), (1, "1–2", RED[0]), (2, "2–5", RED[1]), (5, "5–10", RED[2]), (10, "10–20", RED[3]),
     (20, "20+", RED[4]),
 ]
-REGIONS = {  # WHO animations; each region's total line is named after it
+REGIONS = {  # each region's total line is named after its key
     "World": dict(
-        highlight={"BRA": "#2a78d6", "PER": "#eb6834", "ARG": "#1baf7a", "THA": "#eda100", "NIC": "#e87ba4",
-                   "PRY": "#008300"},
-        bins=[(0, "0", EMPTY), (1, "1–10", RED[0]), (10, "10–100", RED[1]), (100, "100–1k", RED[2]),
+        bins=[(0, "<1 or no data", EMPTY), (1, "1–10", RED[0]), (10, "10–100", RED[1]), (100, "100–1k", RED[2]),
               (1000, "1k–5k", RED[3]), (5000, "5k+", RED[4])],
-        crs="EPSG:8857", extent=None, tick_step=2, steps=6, dashed=True,  # Equal Earth; yearly, current year partial
+        crs="EPSG:8857", extent=None, source="Source: WHO, gaps\nfilled from OpenDengue",  # Equal Earth
+        size=(18, 7), map_ax=(0.0, 0.12, 0.51, 0.78), line_ax=(0.575, 0.1, 0.3, 0.85), tick_step=4,
+        extra=["PAN", "BOL", "ARG", "LKA"],  # recent risers Panama, Argentina; mid-range Bolivia, Sri Lanka
+        legend=dict(ncol=6, bbox_to_anchor=(0.01, 0.0), title="Cumulative cases per 100,000"),
     ),
-    "Europe": dict(
-        highlight={"ITA": "#2a78d6", "FRA": "#eb6834", "ESP": "#1baf7a"},
-        bins=[(0, "0", EMPTY), (1e-9, "<0.05", RED[0]), (0.05, "0.05–0.1", RED[1]), (0.1, "0.1–0.25", RED[2]),
-              (0.25, "0.25–0.5", RED[3]), (0.5, "0.5+", RED[4])],  # 1e-9: any case at all
-        crs="EPSG:3035", extent=(2.2e6, 1.3e6, 9.26e6, 5.5e6), tick_step=1, steps=2, dashed=False,  # LAEA; monthly
+    "EU/EEA": dict(
+        bins=[(0, "<1 or no data", EMPTY)] + INC_BINS[1:],
+        crs="EPSG:3035", extent=(2.55e6, 1.38e6, 6.0e6, 5.48e6), source="Source: ECDC",  # LAEA; mainland and Iceland
+        size=(16, 7), map_ax=(0.17, 0.04, 0.31, 0.86), line_ax=(0.55, 0.1, 0.33, 0.85), tick_step=2, extra=[],
+        legend=dict(ncol=1, bbox_to_anchor=(0.01, 0.04), title="Cumulative cases\nper 100,000"),
     ),
 }
 
@@ -67,11 +71,14 @@ def _states():
     return geo
 
 
-def _spread(ys, gap):
-    """Nudge label positions upward so neighbours are at least `gap` apart."""
-    out, prev = {}, float("-inf")
+def _spread(ys, gap, top=np.inf):
+    """Nudge label positions upward so neighbours are at least `gap` apart, then back down below `top`."""
+    out, prev = {}, -np.inf
     for k in sorted(ys, key=ys.get):
         out[k] = prev = max(ys[k], prev + gap)
+    for k in sorted(out, key=out.get, reverse=True):
+        out[k] = top = min(out[k], top)
+        top -= gap
     return out
 
 
@@ -102,7 +109,7 @@ def _draw_lines(ax, cum, context, highlight, total, names, ticks, fs=1, end_dots
 
     ends = {c: cum[c].iloc[-1] for c in [*highlight, total]}
     height_pt = ax.get_position().height * ax.figure.get_figheight() * 72
-    for c, y in _spread(ends, gap=13 * fs / height_pt * ymax).items():
+    for c, y in _spread(ends, gap=13 * fs / height_pt * ymax, top=ymax).items():
         if end_dots:
             ax.plot(x[-1], ends[c], "o", ms=5, color=highlight.get(c, INK), zorder=4)
         ax.annotate(names[c], (x[-1], ends[c]), xytext=(1.01, y), textcoords=("axes fraction", "data"), va="center",
@@ -122,7 +129,7 @@ def _animate(fig, ax_line, shapes, cum, labels, bins, marked, path, steps=6, fps
     x = cum.index.to_numpy(float)
     ts = np.linspace(x[0], x[-1], (len(x) - 1) * steps + 1)
     frames = [x[0]] * fps + list(ts) + [x[-1]] * 4 * fps  # hold the first and last frames
-    reported, filled = cum.notna(), cum.fillna(0)
+    filled = cum.fillna(0)  # countries are gray until they first report
     stamp = fig.text(0.01, 0.97, "", fontsize=26, fontweight="bold", color=INK, va="top")
     guide = ax_line.axvline(x[0], color=MUTED, lw=0.8, zorder=0)
     dots = {c: ax_line.plot([], [], "o", ms=9, color=k, mec="white", mew=1.5, zorder=5)[0] for c, k in marked.items()}
@@ -131,9 +138,7 @@ def _animate(fig, ax_line, shapes, cum, labels, bins, marked, path, steps=6, fps
         """Draw the frame for time t, which falls in period k."""
         k = np.searchsorted(x, t - 1e-9)
         for c, shape in shapes.items():
-            on = c in reported and reported[c].iat[k]
-            shape.set_facecolor(_bin_color(np.interp(t, x, filled[c]), bins) if on else NODATA)
-            shape.set_edgecolor("white" if on else CONTEXT)
+            shape.set_facecolor(_bin_color(np.interp(t, x, filled[c]), bins))
         for c, dot in dots.items():
             dot.set_data([t], [np.interp(t, x, cum[c])])
         guide.set_xdata([t, t])
@@ -168,7 +173,8 @@ def animation(df, path):
     ax_map = fig.add_axes((0.0, 0.0, 0.44, 0.8))
     ax_line = fig.add_axes((0.5, 0.1, 0.36, 0.85))
     geo = _states()
-    shapes = {s: gpd.GeoSeries([g]).plot(ax=ax_map, lw=0.5).collections[-1] for s, g in zip(geo.state, geo.geometry)}
+    shapes = {s: gpd.GeoSeries([g]).plot(ax=ax_map, ec="white", lw=0.5).collections[-1]
+              for s, g in zip(geo.state, geo.geometry)}
     ax_map.invert_yaxis()  # us-atlas is pre-projected in screen coordinates
     ax_map.set_axis_off()
     fig.legend(handles=[Patch(color=c, label=l) for _, l, c in INC_BINS], loc="upper right", ncol=6,
@@ -182,27 +188,33 @@ def animation(df, path):
 
 
 @plt.rc_context({"font.size": 20})
-def who_animation(region, cum, labels, size, names, path):
-    """Animate a WHO region's cumulative incidence map filling in while circles advance along the line plot."""
+def region_animation(region, cum, size, names, path):
+    """Animate a region's cumulative incidence map filling in while circles advance along the line plot."""
     s = REGIONS[region]
-    fig = plt.figure(figsize=(18, 7), dpi=100)
-    ax_map = fig.add_axes((0.0, 0.12, 0.51, 0.78), anchor="S")  # a cropped extent should match this aspect
-    ax_line = fig.add_axes((0.575, 0.1, 0.3, 0.85))
-    world = gpd.read_file(WORLD).to_crs(s["crs"])
-    shapes = {c: gpd.GeoSeries([g]).plot(ax=ax_map, lw=0.4).collections[-1] for c, g in zip(world.iso3, world.geometry)}
+    names = {c: re.sub(r" \(.*\)", "", n) for c, n in names.items()} | {region: region}  # "Bolivia (...)"
+    fig = plt.figure(figsize=s["size"], dpi=100)
+    ax_map = fig.add_axes(s["map_ax"], anchor="S")
+    ax_line = fig.add_axes(s["line_ax"])
+    geo = gpd.read_file(WORLD).to_crs(s["crs"]).set_index("iso3").geometry
+    shapes = {c: gpd.GeoSeries([g]).plot(ax=ax_map, fc=EMPTY, ec="white", lw=0.4).collections[-1]
+              for c, g in geo.items()}  # all gray to start with; those without data stay that way
     if s["extent"]:
         ax_map.set(xlim=s["extent"][::2], ylim=s["extent"][1::2])
     ax_map.set_axis_off()
-    handles = [Patch(color=c, label=l) for _, l, c in s["bins"]] + [Patch(fc=NODATA, ec=CONTEXT, label="No data")]
-    fig.legend(handles=handles, loc="lower left", ncol=7, bbox_to_anchor=(0.01, 0.0), frameon=False, fontsize=18,
-               title="Cumulative cases per 100,000", title_fontsize=18, alignment="left", handlelength=1,
-               handletextpad=0.4, columnspacing=0.8)
-    context = [c for c in cum.columns if size.get(c, 0) >= MIN_POP and c not in s["highlight"]]
-    _draw_lines(ax_line, cum, context, s["highlight"], region, names, _year_ticks(cum.index, s["tick_step"]), fs=2,
-                end_dots=False, dashed=s["dashed"], ylabel="Cases per 100,000 residents")
-    ax_line.text(0.02, 0.98, "Source: WHO global\ndengue surveillance", transform=ax_line.transAxes, va="top",
-                 fontsize=20, color=MUTED, bbox=dict(facecolor="white", edgecolor="none", pad=2))
-    _animate(fig, ax_line, shapes, cum, labels, s["bins"], s["highlight"] | {region: INK}, path, steps=s["steps"])
+    fig.legend(handles=[Patch(color=c, label=l) for _, l, c in s["bins"]], loc="lower left", frameon=False,
+               fontsize=18, title_fontsize=18, alignment="left", handlelength=1, handletextpad=0.4, columnspacing=0.8,
+               **s["legend"])
+
+    shown = [c for c in cum.columns.drop(region) if size.get(c, 0) >= MIN_POP]
+    end = cum.iloc[-1][shown]
+    highlight = dict(zip([*end.nlargest(3).index, *s["extra"]], PALETTE))
+    context = [c for c in shown if c not in highlight]
+    _draw_lines(ax_line, cum, context, highlight, region, names, _year_ticks(cum.index, s["tick_step"]), fs=2,
+                end_dots=False, dashed=cum.index[-1] == date.today().year, ylabel="Cases per 100,000 residents")
+    ax_line.text(0.02, 0.98, s["source"], transform=ax_line.transAxes, va="top", fontsize=20, color=MUTED,
+                 bbox=dict(facecolor="white", edgecolor="none", pad=2))
+    shapes = {c: shape for c, shape in shapes.items() if c in cum}
+    _animate(fig, ax_line, shapes, cum, [str(y) for y in cum.index], s["bins"], highlight | {region: INK}, path)
 
 
 def cases_map(df, path, years):
