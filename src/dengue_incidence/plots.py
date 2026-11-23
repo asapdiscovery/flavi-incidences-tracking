@@ -1,4 +1,4 @@
-"""Figures of dengue incidence: US states (CDC), the world (WHO, OpenDengue) and the EU/EEA (ECDC)."""
+"""Figures of dengue and West Nile virus incidence: US states (CDC), the world (WHO, OpenDengue), EU/EEA (ECDC)."""
 
 import re
 from datetime import date
@@ -33,30 +33,44 @@ INC_BINS = [  # cumulative cases per 100k (under 1 shown as 0)
     (0, "0", EMPTY), (1, "1–2", RED[0]), (2, "2–5", RED[1]), (5, "5–10", RED[2]), (10, "10–20", RED[3]),
     (20, "20+", RED[4]),
 ]
-REGIONS = {  # each region's total line is named after its key
-    "World": dict(
+WNV_BINS = [  # cumulative neuroinvasive cases per 100k
+    (0, "<1", EMPTY), (1, "1–5", RED[0]), (5, "5–10", RED[1]), (10, "10–25", RED[2]), (25, "25–50", RED[3]),
+    (50, "50+", RED[4]),
+]
+_EU = dict(
+    bins=[(0, "<1 or no data", EMPTY)] + INC_BINS[1:],
+    crs="EPSG:3035", extent=(2.55e6, 1.38e6, 6.0e6, 5.48e6), source="Source: ECDC",  # LAEA; mainland and Iceland
+    size=(16, 7), map_ax=(0.17, 0.04, 0.31, 0.86), line_ax=(0.55, 0.1, 0.33, 0.85), tick_step=2, extra=[],
+    stamp="{}", key_title="Cumulative cases\nper 100,000", legend=dict(ncol=1, bbox_to_anchor=(0.01, 0.04)),
+)
+VIEWS = {  # settings by disease and region; a region's total line is named after it
+    ("Dengue", "US"): dict(status="All", highlight=HIGHLIGHT, bins=INC_BINS, tick_step=2, stamp="{}",
+                           key_title="Cumulative cases per 100,000", source="Source: CDC ArboNET\nvia cdc.gov/dengue"),
+    ("West Nile virus", "US"): dict(
+        status="Neuroinvasive", highlight=dict(zip(["SD", "ND", "NE", "AZ", "CA"], PALETTE)), bins=WNV_BINS,
+        tick_step=4, stamp="West Nile virus, {}", key_title="Cumulative neuroinvasive cases per 100,000",
+        source="Source: CDC ArboNET via\ncdc.gov/west-nile-virus",
+    ),  # top 3; Arizona for its record 2021 outbreak; California for the most cases
+    ("Dengue", "World"): dict(
         bins=[(0, "<1 or no data", EMPTY), (1, "1–10", RED[0]), (10, "10–100", RED[1]), (100, "100–1k", RED[2]),
               (1000, "1k–5k", RED[3]), (5000, "5k+", RED[4])],
         crs="EPSG:8857", extent=None, source="Source: WHO, gaps\nfilled from OpenDengue",  # Equal Earth
         size=(18, 7), map_ax=(0.0, 0.12, 0.51, 0.78), line_ax=(0.575, 0.1, 0.3, 0.85), tick_step=4,
         extra=["PAN", "BOL", "ARG", "LKA"],  # recent risers Panama, Argentina; mid-range Bolivia, Sri Lanka
-        legend=dict(ncol=6, bbox_to_anchor=(0.01, 0.0), title="Cumulative cases per 100,000"),
+        stamp="{}", key_title="Cumulative cases per 100,000", legend=dict(ncol=6, bbox_to_anchor=(0.01, 0.0)),
     ),
-    "EU/EEA": dict(
-        bins=[(0, "<1 or no data", EMPTY)] + INC_BINS[1:],
-        crs="EPSG:3035", extent=(2.55e6, 1.38e6, 6.0e6, 5.48e6), source="Source: ECDC",  # LAEA; mainland and Iceland
-        size=(16, 7), map_ax=(0.17, 0.04, 0.31, 0.86), line_ax=(0.55, 0.1, 0.33, 0.85), tick_step=2, extra=[],
-        legend=dict(ncol=1, bbox_to_anchor=(0.01, 0.04), title="Cumulative cases\nper 100,000"),
-    ),
+    ("Dengue", "EU/EEA"): _EU,
+    ("West Nile virus", "EU/EEA"): _EU | dict(stamp="West Nile virus, {}", extra=["ITA"],  # Italy: the most cases
+                                             key_title="Cumulative locally\nacquired cases\nper 100,000"),
 }
 
 plt.rcParams.update({"font.family": "DejaVu Sans", "axes.edgecolor": MUTED, "axes.labelcolor": INK,
                      "xtick.color": MUTED, "ytick.color": MUTED})
 
 
-def _us_cumulative(df):
+def _us_cumulative(df, status="All"):
     """Return cumulative incidence per 100k as a year x state table."""
-    return df[df.status == "All"].pivot(index="year", columns="state", values="incidence").cumsum()
+    return df[df.status == status].pivot(index="year", columns="state", values="incidence").cumsum()
 
 
 def _bin_color(n, bins):
@@ -166,9 +180,10 @@ def incidence_lines(df, cutoff, path):
 
 
 @plt.rc_context({"font.size": 20})  # doubles default-sized text (axis label, y ticks)
-def animation(df, path):
+def animation(df, path, disease="Dengue"):
     """Animate the US cumulative incidence map filling in while circles advance along the line plot."""
-    inc = _us_cumulative(df)
+    s = VIEWS[disease, "US"]
+    inc = _us_cumulative(df, s["status"])
     fig = plt.figure(figsize=(18, 7), dpi=100)
     ax_map = fig.add_axes((0.0, 0.0, 0.44, 0.8))
     ax_line = fig.add_axes((0.5, 0.1, 0.36, 0.85))
@@ -177,20 +192,22 @@ def animation(df, path):
               for s, g in zip(geo.state, geo.geometry)}
     ax_map.invert_yaxis()  # us-atlas is pre-projected in screen coordinates
     ax_map.set_axis_off()
-    fig.legend(handles=[Patch(color=c, label=l) for _, l, c in INC_BINS], loc="upper right", ncol=6,
-               bbox_to_anchor=(0.43, 0.88), frameon=False, fontsize=18, title="Cumulative cases per 100,000",
+    fig.legend(handles=[Patch(color=c, label=l) for _, l, c in s["bins"]], loc="upper right", ncol=6,
+               bbox_to_anchor=(0.43, 0.88), frameon=False, fontsize=18, title=s["key_title"],
                title_fontsize=18, alignment="left", handlelength=1, handletextpad=0.4, columnspacing=0.8)
-    _draw_lines(ax_line, inc, US_CONTEXT, HIGHLIGHT, "US", NAMES, _year_ticks(inc.index, 2), fs=2, end_dots=False,
-                ylabel="Cases per 100,000 residents")
-    ax_line.text(0.02, 0.98, "Source: CDC ArboNET\nvia cdc.gov/dengue", transform=ax_line.transAxes, va="top",
-                 fontsize=20, color=MUTED, bbox=dict(facecolor="white", edgecolor="none", pad=2))
-    _animate(fig, ax_line, shapes, inc, [str(y) for y in inc.index], INC_BINS, HIGHLIGHT | {"US": INK}, path)
+    context = [c for c in STATES if c not in s["highlight"]]
+    _draw_lines(ax_line, inc, context, s["highlight"], "US", NAMES, _year_ticks(inc.index, s["tick_step"]), fs=2,
+                end_dots=False, ylabel="Cases per 100,000 residents")
+    ax_line.text(0.02, 0.98, s["source"], transform=ax_line.transAxes, va="top", fontsize=20, color=MUTED,
+                 bbox=dict(facecolor="white", edgecolor="none", pad=2))
+    _animate(fig, ax_line, shapes, inc, [s["stamp"].format(y) for y in inc.index], s["bins"],
+             s["highlight"] | {"US": INK}, path)
 
 
 @plt.rc_context({"font.size": 20})
-def region_animation(region, cum, size, names, path):
+def region_animation(region, cum, size, names, path, disease="Dengue"):
     """Animate a region's cumulative incidence map filling in while circles advance along the line plot."""
-    s = REGIONS[region]
+    s = VIEWS[disease, region]
     names = {c: re.sub(r" \(.*\)", "", n) for c, n in names.items()} | {region: region}  # "Bolivia (...)"
     fig = plt.figure(figsize=s["size"], dpi=100)
     ax_map = fig.add_axes(s["map_ax"], anchor="S")
@@ -202,8 +219,8 @@ def region_animation(region, cum, size, names, path):
         ax_map.set(xlim=s["extent"][::2], ylim=s["extent"][1::2])
     ax_map.set_axis_off()
     fig.legend(handles=[Patch(color=c, label=l) for _, l, c in s["bins"]], loc="lower left", frameon=False,
-               fontsize=18, title_fontsize=18, alignment="left", handlelength=1, handletextpad=0.4, columnspacing=0.8,
-               **s["legend"])
+               fontsize=18, title=s["key_title"], title_fontsize=18, alignment="left", handlelength=1,
+               handletextpad=0.4, columnspacing=0.8, **s["legend"])
 
     shown = [c for c in cum.columns.drop(region) if size.get(c, 0) >= MIN_POP]
     end = cum.iloc[-1][shown]
@@ -214,7 +231,8 @@ def region_animation(region, cum, size, names, path):
     ax_line.text(0.02, 0.98, s["source"], transform=ax_line.transAxes, va="top", fontsize=20, color=MUTED,
                  bbox=dict(facecolor="white", edgecolor="none", pad=2))
     shapes = {c: shape for c, shape in shapes.items() if c in cum}
-    _animate(fig, ax_line, shapes, cum, [str(y) for y in cum.index], s["bins"], highlight | {region: INK}, path)
+    _animate(fig, ax_line, shapes, cum, [s["stamp"].format(y) for y in cum.index], s["bins"], highlight | {region: INK},
+             path)
 
 
 def cases_map(df, path, years):
